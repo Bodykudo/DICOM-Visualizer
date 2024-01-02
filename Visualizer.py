@@ -106,14 +106,6 @@ class Visualizer:
         renderer = vtk.vtkRenderer()
         renderer.SetBackground(0.1, 0.2, 0.3)
 
-        render_window = vtk.vtkRenderWindow()
-        render_window.AddRenderer(renderer)
-        render_window.SetSize(500, 500)
-
-        # Create render window interactor
-        render_window_interactor = vtk.vtkRenderWindowInteractor()
-        render_window_interactor.SetRenderWindow(render_window)
-
         if self.mode == "raycast":
             # Add volume to renderer
             volume = self.raycast_rendering()
@@ -123,7 +115,5 @@ class Visualizer:
             surface_actor = self.surface_rendering()
             renderer.AddActor(surface_actor)
 
-        # Reset camera, render, and start the interaction
         renderer.ResetCamera()
-        render_window.Render()
-        render_window_interactor.Start()
+        return renderer

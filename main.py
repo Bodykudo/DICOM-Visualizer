@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import (
     QColorDialog,
 )
 from PyQt6.QtCore import Qt, QCoreApplication
+from PyQt6.QtGui import QColor
+from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
 from Visualizer import Visualizer
 
@@ -21,18 +23,23 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle("DICOM Visualizer")
-        self.setFixedWidth(300)
+        self.setFixedWidth(800)
+        self.setFixedHeight(450)
 
-        self.layout = QVBoxLayout(self)
+        self.layout = QHBoxLayout(self)
 
+        self.controls_layout = QVBoxLayout()
+
+        # Create the controls for the folder selection
         self.select_folder_button = QPushButton("Select Folder")
         self.select_folder_button.clicked.connect(self.select_folder)
 
         self.selected_folder_label = QLabel()
         self.selected_folder_label.setText("No folder selected")
 
-        self.folder = ""
+        self.selected_folder = None
 
+        # Create the controls for the rendering mode
         self.raycast_button = QRadioButton("Raycast Rendering")
         self.surface_button = QRadioButton("Surface Rendering")
 
@@ -41,15 +48,21 @@ class MainWindow(QWidget):
         self.raycast_button.toggled.connect(self.toggle_inputs)
         self.surface_button.toggled.connect(self.toggle_inputs)
 
+        # Create the controls for the raycast rendering
         self.ambient_input = QDoubleSpinBox()
         self.ambient_input.setValue(0.1)
+        self.ambient_input.valueChanged.connect(self.visualize)
         self.diffuse_input = QDoubleSpinBox()
         self.diffuse_input.setValue(0.9)
+        self.diffuse_input.valueChanged.connect(self.visualize)
         self.specular_input = QDoubleSpinBox()
         self.specular_input.setValue(0.2)
+        self.specular_input.valueChanged.connect(self.visualize)
         self.specular_power_input = QDoubleSpinBox()
         self.specular_power_input.setValue(10.0)
+        self.specular_power_input.valueChanged.connect(self.visualize)
 
+        # Create the controls for the surface rendering
         self.isovalue_slider = QSlider(Qt.Orientation.Horizontal)
         self.isovalue_slider.setRange(100, 1000)
         self.isovalue_slider.valueChanged.connect(self.update_isovalue_label)
@@ -57,6 +70,7 @@ class MainWindow(QWidget):
         self.isovalue_label = QLabel()
         self.isovalue_label.setText(f"Isovalue: {self.isovalue_slider.value()}")
 
+        # Create the controls for the color
         self.color_layout = QWidget()
         self.color_layout.setLayout(QHBoxLayout())
 
@@ -70,28 +84,36 @@ class MainWindow(QWidget):
         self.color_layout.layout().addWidget(self.color_label)
         self.color_layout.layout().addWidget(self.color_button)
 
+        # Create the visualize button
         self.visualize_button = QPushButton("Visualize")
         self.visualize_button.setEnabled(False)
         self.visualize_button.clicked.connect(self.visualize)
 
-        self.layout.addWidget(self.select_folder_button)
-        self.layout.addWidget(self.selected_folder_label)
-        self.layout.addWidget(self.raycast_button)
-        self.layout.addWidget(self.surface_button)
-        self.layout.addWidget(QLabel("Ambient:"))
-        self.layout.addWidget(self.ambient_input)
-        self.layout.addWidget(QLabel("Diffuse:"))
-        self.layout.addWidget(self.diffuse_input)
-        self.layout.addWidget(QLabel("Specular:"))
-        self.layout.addWidget(self.specular_input)
-        self.layout.addWidget(QLabel("Specular Power:"))
-        self.layout.addWidget(self.specular_power_input)
-        self.layout.addWidget(QLabel("Isovalue:"))
-        self.layout.addWidget(self.isovalue_slider)
-        self.layout.addWidget(self.isovalue_label)
-        self.layout.addWidget(self.color_layout)
-        self.layout.addWidget(self.visualize_button)
+        # Add the controls to the layout
+        self.controls_layout.addWidget(self.select_folder_button)
+        self.controls_layout.addWidget(self.selected_folder_label)
+        self.controls_layout.addWidget(self.raycast_button)
+        self.controls_layout.addWidget(self.surface_button)
+        self.controls_layout.addWidget(QLabel("Ambient:"))
+        self.controls_layout.addWidget(self.ambient_input)
+        self.controls_layout.addWidget(QLabel("Diffuse:"))
+        self.controls_layout.addWidget(self.diffuse_input)
+        self.controls_layout.addWidget(QLabel("Specular:"))
+        self.controls_layout.addWidget(self.specular_input)
+        self.controls_layout.addWidget(QLabel("Specular Power:"))
+        self.controls_layout.addWidget(self.specular_power_input)
+        self.controls_layout.addWidget(QLabel("Isovalue:"))
+        self.controls_layout.addWidget(self.isovalue_slider)
+        self.controls_layout.addWidget(self.isovalue_label)
+        self.controls_layout.addWidget(self.color_layout)
+        self.controls_layout.addWidget(self.visualize_button)
 
+        # Create the VTK widget
+        self.vtk_widget = QVTKRenderWindowInteractor()
+        self.layout.addLayout(self.controls_layout)
+        self.layout.addWidget(self.vtk_widget)
+
+        # Set up the window
         self.toggle_inputs()
         self.center_on_screen()
 
@@ -110,6 +132,7 @@ class MainWindow(QWidget):
         if self.selected_folder:
             self.selected_folder_label.setText(self.selected_folder)
             self.visualize_button.setEnabled(True)
+            self.visualize()
 
     def toggle_inputs(self):
         # Enable/disable inputs based on the selected rendering mode
@@ -119,41 +142,51 @@ class MainWindow(QWidget):
         self.specular_input.setEnabled(raycast_selected)
         self.specular_power_input.setEnabled(raycast_selected)
         self.isovalue_slider.setEnabled(not raycast_selected)
+        if self.selected_folder:
+            self.visualize()
 
     def update_isovalue_label(self):
         # Update the isovalue label when the slider value changes
         self.isovalue_label.setText(f"Isovalue: {self.isovalue_slider.value()}")
+        if self.selected_folder:
+            self.visualize()
 
     def pick_color(self):
-        color = QColorDialog.getColor()
+        initial_color = QColor(*[int(c * 255) for c in self.color])
+        color = QColorDialog.getColor(initial_color)
         if color.isValid():
             self.color_button.setStyleSheet(f"background-color: {color.name()}")
             self.color = color.getRgbF()[:3]
-            print(self.color)
+            if self.selected_folder:
+                self.visualize()
 
     def visualize(self):
-        # Get the current values of the inputs
-        current_mode = "raycast" if self.raycast_button.isChecked() else "surface"
-        current_ambient = self.ambient_input.value()
-        current_diffuse = self.diffuse_input.value()
-        current_specular = self.specular_input.value()
-        current_specular_power = self.specular_power_input.value()
-        current_isovalue = self.isovalue_slider.value()
+        if self.selected_folder:
+            # Get the current values of the inputs
+            current_mode = "raycast" if self.raycast_button.isChecked() else "surface"
+            current_ambient = self.ambient_input.value()
+            current_diffuse = self.diffuse_input.value()
+            current_specular = self.specular_input.value()
+            current_specular_power = self.specular_power_input.value()
+            current_isovalue = self.isovalue_slider.value()
 
-        # Create a visualizer object
-        visualizer = Visualizer(
-            folder=self.selected_folder,
-            mode=current_mode,
-            ambient=current_ambient,
-            diffuse=current_diffuse,
-            specular=current_specular,
-            specular_power=current_specular_power,
-            isovalue=current_isovalue,
-            color=self.color,
-        )
+            # Create a visualizer object
+            visualizer = Visualizer(
+                folder=self.selected_folder,
+                mode=current_mode,
+                ambient=current_ambient,
+                diffuse=current_diffuse,
+                specular=current_specular,
+                specular_power=current_specular_power,
+                isovalue=current_isovalue,
+                color=self.color,
+            )
 
-        # Render the data
-        visualizer.render()
+            # Clear old data and render the data
+            self.vtk_widget.GetRenderWindow().GetRenderers().RemoveAllItems()
+            renderer = visualizer.render()
+            self.vtk_widget.GetRenderWindow().AddRenderer(renderer)
+            self.vtk_widget.GetRenderWindow().Render()
 
 
 def main():
