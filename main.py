@@ -16,7 +16,7 @@ from PyQt6.QtGui import QColor
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
 from Visualizer import Visualizer
-
+import os
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -24,7 +24,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("DICOM Visualizer")
         self.setFixedWidth(800)
-        self.setFixedHeight(450)
+        self.setFixedHeight(500)
 
         self.layout = QHBoxLayout(self)
 
@@ -130,7 +130,8 @@ class MainWindow(QWidget):
         # Open a dialog to select a folder
         self.selected_folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if self.selected_folder:
-            self.selected_folder_label.setText(self.selected_folder)
+            folder_name = os.path.basename(self.selected_folder)
+            self.selected_folder_label.setText(folder_name)
             self.visualize_button.setEnabled(True)
             self.visualize()
 
