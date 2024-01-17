@@ -18,6 +18,7 @@ from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from Visualizer import Visualizer
 import os
 
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -51,20 +52,23 @@ class MainWindow(QWidget):
         # Create the controls for the raycast rendering
         self.ambient_input = QDoubleSpinBox()
         self.ambient_input.setValue(0.1)
-        self.ambient_input.valueChanged.connect(self.visualize)
+        self.ambient_input.valueChanged.connect(lambda: self.visualize(in_place=True))
         self.diffuse_input = QDoubleSpinBox()
         self.diffuse_input.setValue(0.9)
-        self.diffuse_input.valueChanged.connect(self.visualize)
+        self.diffuse_input.valueChanged.connect(lambda: self.visualize(in_place=True))
         self.specular_input = QDoubleSpinBox()
         self.specular_input.setValue(0.2)
-        self.specular_input.valueChanged.connect(self.visualize)
+        self.specular_input.valueChanged.connect(lambda: self.visualize(in_place=True))
         self.specular_power_input = QDoubleSpinBox()
         self.specular_power_input.setValue(10.0)
-        self.specular_power_input.valueChanged.connect(self.visualize)
+        self.specular_power_input.valueChanged.connect(
+            lambda: self.visualize(in_place=True)
+        )
 
         # Create the controls for the surface rendering
         self.isovalue_slider = QSlider(Qt.Orientation.Horizontal)
-        self.isovalue_slider.setRange(100, 1000)
+        self.isovalue_slider.setRange(0, 1000)
+        self.isovalue_slider.setValue(100)
         self.isovalue_slider.valueChanged.connect(self.update_isovalue_label)
 
         self.isovalue_label = QLabel()
@@ -150,7 +154,7 @@ class MainWindow(QWidget):
         # Update the isovalue label when the slider value changes
         self.isovalue_label.setText(f"Isovalue: {self.isovalue_slider.value()}")
         if self.selected_folder:
-            self.visualize()
+            self.visualize(in_place=True)
 
     def pick_color(self):
         initial_color = QColor(*[int(c * 255) for c in self.color])
@@ -159,9 +163,9 @@ class MainWindow(QWidget):
             self.color_button.setStyleSheet(f"background-color: {color.name()}")
             self.color = color.getRgbF()[:3]
             if self.selected_folder:
-                self.visualize()
+                self.visualize(in_place=True)
 
-    def visualize(self):
+    def visualize(self, in_place=False):
         if self.selected_folder:
             # Get the current values of the inputs
             current_mode = "raycast" if self.raycast_button.isChecked() else "surface"
@@ -183,11 +187,44 @@ class MainWindow(QWidget):
                 color=self.color,
             )
 
-            # Clear old data and render the data
-            self.vtk_widget.GetRenderWindow().GetRenderers().RemoveAllItems()
+            # Get the current renderer
+            render_window = self.vtk_widget.GetRenderWindow()
+            current_renderer = render_window.GetRenderers().GetFirstRenderer()
+
+            # Store the current camera settings
+            if current_renderer:
+                camera = current_renderer.GetActiveCamera()
+                position = camera.GetPosition()
+                focal_point = camera.GetFocalPoint()
+                view_up = camera.GetViewUp()
+
+            # Clear old data
+            render_window.GetRenderers().RemoveAllItems()
+
+            # Render the new data
             renderer = visualizer.render()
-            self.vtk_widget.GetRenderWindow().AddRenderer(renderer)
-            self.vtk_widget.GetRenderWindow().Render()
+
+            # Apply the stored camera settings to the new renderer if update in place is enabled
+            if current_renderer and in_place:
+                new_camera = renderer.GetActiveCamera()
+                new_camera.SetPosition(position)
+                new_camera.SetFocalPoint(focal_point)
+                new_camera.SetViewUp(view_up)
+
+            # Set the background color and add the new renderer
+            if not self.isDarkMode():
+                renderer.SetBackground(0.9, 0.9, 0.9)
+            render_window.AddRenderer(renderer)
+            render_window.Render()
+
+    def isDarkMode(self):
+        """
+        Checks if the application is in dark mode
+        """
+        widget = QWidget()
+        color = widget.palette().color(QWidget().backgroundRole())
+        brightness = color.red() * 0.299 + color.green() * 0.587 + color.blue() * 0.114
+        return brightness < 128
 
 
 def main():
